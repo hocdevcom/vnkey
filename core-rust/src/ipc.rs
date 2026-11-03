@@ -63,6 +63,11 @@ impl Runtime {
             .unwrap_or_else(|e| e.into_inner())
             .clone()
     }
+    /// Avoid copying application/macro settings on every physical keypress.
+    pub fn snapshot_if_changed(&self, revision: u64) -> Option<Snapshot> {
+        let state = self.shared.read().unwrap_or_else(|e| e.into_inner());
+        (state.revision != revision).then(|| state.clone())
+    }
     pub fn command(&self, json: &str) -> String {
         command(&self.shared, &self.config_path, json)
     }
@@ -72,17 +77,8 @@ impl Runtime {
     }
     #[cfg(unix)]
     fn start_server(&mut self) -> io::Result<()> {
-        let base = if let Some(dir) = std::env::var_os("XDG_RUNTIME_DIR").filter(|s| !s.is_empty())
-        {
-            PathBuf::from(dir)
-        } else {
-            self.config_path
-                .parent()
-                .ok_or_else(|| io::Error::other("missing config directory"))?
-                .join("run")
-        };
         self.server = Some(Server::start(
-            base.join("viet-ime"),
+            Settings::runtime_directory(&self.config_path),
             self.shared.clone(),
             self.config_path.clone(),
         )?);

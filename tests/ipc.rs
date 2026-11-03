@@ -104,6 +104,11 @@ fn unix_socket_lifecycle_and_live_reload() {
     );
     assert_eq!(runtime.snapshot().settings.input_method, "VNI");
     assert!(!runtime.snapshot().settings.enabled);
+    std::fs::write(&config, "input_method='Telex'\nenabled=true\n").unwrap();
+    let report = viet_core::control::notify_directory(&directory);
+    assert_eq!(report.notified, 1);
+    assert!(report.errors.is_empty());
+    assert_eq!(runtime.snapshot().settings.input_method, "Telex");
     // A stalled client must not keep the background worker alive during unload.
     let _stalled = UnixStream::connect(&socket).unwrap();
     let before = std::time::Instant::now();

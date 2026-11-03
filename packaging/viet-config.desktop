@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Viet IME Settings
+Name[vi]=Cài đặt Viet IME
+Comment=Shared Vietnamese input settings for IBus and Fcitx5
+Exec=viet-config --gui
+Icon=input-keyboard
+Terminal=false
+Categories=Settings;Utility;

@@ -20,3 +20,7 @@
   hai wrapper và kiểm thử cùng lúc.
 - Tất cả kiểm thử vẫn tập trung ở `tests/` tại gốc monorepo. Khai báo đường dẫn
   integration test trong `core-rust/Cargo.toml`, không tạo `core-rust/tests/`.
+- Cài đặt/đóng gói nằm trong `install.sh` và `packaging/`. Không build bằng sudo,
+  không tự ghi đè cấu hình input sources/environment của người dùng.
+- `viet-config` dùng lại module `control`/`settings` trong core cho GUI và CLI;
+  không tạo bộ parser hoặc logic cấu hình riêng trong wrapper hay frontend.

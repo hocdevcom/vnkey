@@ -5,5 +5,6 @@ cargo test --release --locked
 cargo clippy --all-targets -- -D warnings
 cargo build --release --locked
 python3 tests/ffi_smoke.py
+python3 -m unittest discover -s tests -p 'test_*.py'
 cmake -S . -B tests/artifacts/linux-build
 cmake --build tests/artifacts/linux-build --parallel

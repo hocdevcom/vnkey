@@ -17,6 +17,7 @@
       <author>viet-ime contributors</author>
       <layout>us</layout>
       <symbol>vi</symbol>
+      <setup>@CMAKE_INSTALL_FULL_BINDIR@/viet-config --gui</setup>
       <icon>input-keyboard</icon>
     </engine>
   </engines>

@@ -26,6 +26,80 @@ commit `b2e49a2b48c7d3772a3673142a7747eccd9d5f79` (MIT, thông báo trong LICENS
 Giữ các phép biến đổi và mục tiêu trong arena; hỗ trợ free-mark, undo, dịch dấu,
 Backspace và các ngoại lệ `gi`, `qu`, `ươi`, `uôi`, `uya`.
 
+## Cài nhanh trên Linux
+
+Từ thư mục mã nguồn đã tải, chạy bằng tài khoản thường:
+
+```sh
+sh install.sh
+```
+
+Bộ cài tự chọn framework từ môi trường input method, tiến trình đang chạy rồi
+desktop: GNOME ưu tiên IBus; KDE/XFCE/Hyprland ưu tiên Fcitx5 khi chưa có tín hiệu
+phiên làm việc khác. Tự cài dependency bằng apt, dnf, pacman, zypper hoặc apk; chỉ
+build wrapper đã chọn. Nếu Rust distro quá cũ, dùng rustup chính thức, kiểm SHA-256,
+không sửa shell profile. Cần mạng khi tải dependency; SDK IBus cần >= 1.5.27.
+
+Quyền sudo/doas chỉ dùng để cài package và chép sản phẩm vào hệ thống; build chạy
+với tài khoản gọi script. Sau khi cài, đăng xuất/đăng nhập và thêm **Viet IME** trong
+phần Input Sources/Input Method của desktop. Script không ghi đè input sources,
+environment hoặc tự restart phiên đang làm việc. Không thể chọn input method thay
+người dùng một cách đồng nhất cho mọi GNOME/KDE/Wayland compositor.
+
+```sh
+sh install.sh --dry-run                   # xem kế hoạch, không ghi/tải/chạy sudo
+sh install.sh --framework ibus            # chọn rõ framework
+sh install.sh --framework fcitx5
+sh install.sh --framework both            # chỉ dùng khi cần cả hai
+sh install.sh --no-deps --build-only      # môi trường đã có toolchain/SDK
+sh install.sh --jobs 2                    # giảm tải RAM khi build
+sh install.sh --package deb               # tạo gói Debian/Ubuntu, chưa cài
+sh install.sh --package rpm               # tạo gói Fedora/openSUSE, chưa cài
+sh install.sh --package tar               # tạo tarball theo máy đang build
+```
+
+Build tại `target/linux-install/<framework>/`; gói nằm trong `packages/` dưới
+thư mục build. CPack tự dò phụ thuộc ELF cho DEB/RPM; máy tạo gói cần
+`dpkg-shlibdeps` hoặc `rpmbuild`. File `.deb`/`.rpm` có thể cài và gỡ bằng package
+manager chuẩn. Tarball vẫn cần runtime framework, không phải AppImage độc lập.
+Mặc định script cài thẳng bằng CMake; muốn quản lý/gỡ bằng package manager thì dùng
+`--package deb/rpm`, rồi cài gói tương ứng. Chưa có sẵn binary release để tải.
+
+Thư viện core cài riêng vào `<libdir>/viet-ime`, plugin dùng `$ORIGIN` RPATH nên
+không cần sửa `LD_LIBRARY_PATH` hoặc chạy ldconfig. Fcitx5 tìm thư mục addon từ SDK
+máy đích, hỗ trợ `lib`, `lib64`, multiarch. Có thể đặt `--prefix` riêng, nhưng khi
+đó phải cấu hình framework tìm metadata/plugin trong prefix đó.
+
+Mục tiêu là giảm thao tác trên các distro có package manager thông thường, không
+khẳng định một binary chạy trên mọi Linux. NixOS/Guix, Fedora Atomic/immutable và
+framework chạy trong Flatpak cần đóng gói theo hệ thống đó; script không tự ghi vào
+`/usr` của chúng. Distro lạ có thể chuẩn bị dependency rồi dùng `--no-deps`.
+Package names và kế hoạch đã kiểm thử tự động; cài thật trên từng distro, GUI GTK
+và tạo DEB/RPM vẫn cần kiểm chứng trong môi trường Linux.
+
+## Một bảng điều khiển chung
+
+Mở **Viet IME Settings** từ menu ứng dụng hoặc chạy `viet-config --gui`.
+Đây là hộp thoại GTK qua Zenity, dùng chung cho IBus/Fcitx5; chưa có system tray.
+Đổi Telex/VNI, bật/tắt tiếng Việt và kiểu dấu rồi lưu. Phần đọc/ghi/kiểm tra cấu hình
+nằm trong Rust core, không nằm trong wrapper. GUI lưu TOML bằng thay thế atomic,
+giữ các rule ứng dụng và liên kết dữ liệu Bamboo, rồi gửi reload tới mọi socket core
+trong phiên. Core chưa chạy thì cấu hình vẫn được lưu để dùng lúc khởi động sau.
+Việc lưu chuẩn hóa lại TOML, giữ giá trị cấu hình nhưng không giữ comment/format cũ.
+
+CLI dùng cùng module, không cần GUI:
+
+```sh
+viet-config --status                # xem cấu hình lưu trên đĩa
+viet-config --set-method VNI
+viet-config --enable
+viet-config --disable
+viet-config --reload
+```
+
+Không có một service gõ riêng bắt buộc phải bật: listener nằm trong tiến trình
+IBus/Fcitx5 đang nhúng core. GUI chỉ là controller độc lập. C ABI vẫn đúng năm hàm.
+
 ## Build
 
 Core trên Windows hoặc Linux:
@@ -37,7 +111,7 @@ python3 tests/ffi_smoke.py
 ```
 
 Linux tạo `target/release/libviet_core.so`; Windows tạo `viet_core.dll`.
-Windows chạy `python` thay `python3`. Build hai wrapper trên Linux cần CMake >= 3.16,
+Windows chạy `python` thay `python3`. Build core cần Rust >= 1.85. Build hai wrapper trên Linux cần CMake >= 3.16,
 pkg-config, C/C++ compiler, IBus >= 1.5.27 và Fcitx5 development packages:
 
 ```sh

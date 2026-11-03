@@ -97,10 +97,9 @@ impl VietEngine {
         commit
     }
     fn sync_settings(&mut self) -> String {
-        let snapshot = self.runtime.snapshot();
-        if snapshot.revision == self.snapshot.revision {
+        let Some(snapshot) = self.runtime.snapshot_if_changed(self.snapshot.revision) else {
             return String::new();
-        }
+        };
         let commit = self.finish();
         self.core = Engine::new(
             InputMethod::builtin(&snapshot.settings.input_method).expect("validated method"),
