@@ -1,4 +1,5 @@
 /target/
+/disk/
 /tests/tools/oracle.exe
 /tests/upstream/
 /tests/artifacts/

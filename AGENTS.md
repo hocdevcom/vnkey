@@ -24,3 +24,14 @@
   không tự ghi đè cấu hình input sources/environment của người dùng.
 - `viet-config` dùng lại module `control`/`settings` trong core cho GUI và CLI;
   không tạo bộ parser hoặc logic cấu hình riêng trong wrapper hay frontend.
+- Build mặc định trên Windows chỉ tạo thư viện, không tạo `viet-config.exe`.
+  Binary `viet-config` dành riêng cho Linux, bật qua feature `config-app` trong
+  bộ cài/CMake và quy trình kiểm thử Linux.
+- `build.ps1`/`build.sh` mặc định tạo gói binary Linux `.deb` trong `disk/`, dùng
+  Zig cross-compiler + Debian SDK trên Windows, Linux native trên Linux.
+  Không cài/chạy Linux tạm, VM hay container để build khi làm việc trên Windows.
+  Máy đích chỉ cài package, không tự build.
+  Chỉ xuất package sau khi kiểm tra payload ELF và dependency. Không đổi đuôi
+  source archive thành installer hay tạo DEB giả khi thiếu Linux builder.
+- Bản mã nguồn chỉ xuất khi yêu cầu rõ `--source`. Không chép test, cache,
+  upstream, `target/`, cấu hình cá nhân hoặc binary Windows vào bản nguồn đó.

@@ -1,0 +1,18 @@
+FROM debian:12-slim
+ENV DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc g++ make cmake pkg-config python3 curl ca-certificates dpkg-dev binutils \
+    libibus-1.0-dev libfcitx5core-dev libfcitx5utils-dev \
+    && rm -rf /var/lib/apt/lists/*
+ENV CARGO_HOME=/opt/cargo RUSTUP_HOME=/opt/rustup
+ENV PATH="/opt/cargo/bin:${PATH}"
+RUN case "$(dpkg --print-architecture)" in amd64) arch=x86_64;; arm64) arch=aarch64;; *) exit 1;; esac \
+    && url="https://static.rust-lang.org/rustup/dist/${arch}-unknown-linux-gnu/rustup-init" \
+    && curl -fLsS "$url" -o /tmp/rustup-init \
+    && curl -fLsS "$url.sha256" -o /tmp/rustup.sha256 \
+    && printf '%s  /tmp/rustup-init\n' "$(cut -d ' ' -f1 /tmp/rustup.sha256)" | sha256sum -c - \
+    && chmod +x /tmp/rustup-init \
+    && /tmp/rustup-init -y --profile minimal --default-toolchain stable --no-modify-path \
+    && rm /tmp/rustup-init /tmp/rustup.sha256
+WORKDIR /work
+COPY . .

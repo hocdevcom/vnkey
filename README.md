@@ -26,56 +26,27 @@ commit `b2e49a2b48c7d3772a3673142a7747eccd9d5f79` (MIT, thông báo trong LICENS
 Giữ các phép biến đổi và mục tiêu trong arena; hỗ trợ free-mark, undo, dịch dấu,
 Backspace và các ngoại lệ `gi`, `qu`, `ươi`, `uôi`, `uya`.
 
-## Cài nhanh trên Linux
+## Cài trên Linux bằng một file
 
-Từ thư mục mã nguồn đã tải, chạy bằng tài khoản thường:
-
-```sh
-sh install.sh
-```
-
-Bộ cài tự chọn framework từ môi trường input method, tiến trình đang chạy rồi
-desktop: GNOME ưu tiên IBus; KDE/XFCE/Hyprland ưu tiên Fcitx5 khi chưa có tín hiệu
-phiên làm việc khác. Tự cài dependency bằng apt, dnf, pacman, zypper hoặc apk; chỉ
-build wrapper đã chọn. Nếu Rust distro quá cũ, dùng rustup chính thức, kiểm SHA-256,
-không sửa shell profile. Cần mạng khi tải dependency; SDK IBus cần >= 1.5.27.
-
-Quyền sudo/doas chỉ dùng để cài package và chép sản phẩm vào hệ thống; build chạy
-với tài khoản gọi script. Sau khi cài, đăng xuất/đăng nhập và thêm **Viet IME** trong
-phần Input Sources/Input Method của desktop. Script không ghi đè input sources,
-environment hoặc tự restart phiên đang làm việc. Không thể chọn input method thay
-người dùng một cách đồng nhất cho mọi GNOME/KDE/Wayland compositor.
+Chép `disk/viet-ime_0.1.0_debian12_amd64_both.deb` sang Debian 12 amd64 tương thích,
+rồi chạy:
 
 ```sh
-sh install.sh --dry-run                   # xem kế hoạch, không ghi/tải/chạy sudo
-sh install.sh --framework ibus            # chọn rõ framework
-sh install.sh --framework fcitx5
-sh install.sh --framework both            # chỉ dùng khi cần cả hai
-sh install.sh --no-deps --build-only      # môi trường đã có toolchain/SDK
-sh install.sh --jobs 2                    # giảm tải RAM khi build
-sh install.sh --package deb               # tạo gói Debian/Ubuntu, chưa cài
-sh install.sh --package rpm               # tạo gói Fedora/openSUSE, chưa cài
-sh install.sh --package tar               # tạo tarball theo máy đang build
+sudo apt install ./viet-ime_0.1.0_debian12_amd64_both.deb
 ```
 
-Build tại `target/linux-install/<framework>/`; gói nằm trong `packages/` dưới
-thư mục build. CPack tự dò phụ thuộc ELF cho DEB/RPM; máy tạo gói cần
-`dpkg-shlibdeps` hoặc `rpmbuild`. File `.deb`/`.rpm` có thể cài và gỡ bằng package
-manager chuẩn. Tarball vẫn cần runtime framework, không phải AppImage độc lập.
-Mặc định script cài thẳng bằng CMake; muốn quản lý/gỡ bằng package manager thì dùng
-`--package deb/rpm`, rồi cài gói tương ứng. Chưa có sẵn binary release để tải.
+Gói chứa core, `viet-config` và cả hai wrapper **đã biên dịch thành ELF**. Máy đích
+không cần Rust, Cargo, CMake hay compiler; apt chỉ cài runtime dependency. Dùng
+`apt install ./...` thay cho `dpkg -i` để tự giải quyết dependency. Có thể cần mạng
+để apt tải các thư viện runtime chưa có trên máy.
 
-Thư viện core cài riêng vào `<libdir>/viet-ime`, plugin dùng `$ORIGIN` RPATH nên
-không cần sửa `LD_LIBRARY_PATH` hoặc chạy ldconfig. Fcitx5 tìm thư mục addon từ SDK
-máy đích, hỗ trợ `lib`, `lib64`, multiarch. Có thể đặt `--prefix` riêng, nhưng khi
-đó phải cấu hình framework tìm metadata/plugin trong prefix đó.
+Sau cài, đăng xuất/đăng nhập, thêm **Viet IME** trong Input Sources/Input Method;
+mở **Viet IME Settings** để đổi kiểu gõ. Gỡ bằng `sudo apt remove viet-ime`.
+Không ghi đè cấu hình input sources/environment hoặc tự bật hai framework cùng lúc.
+Gói mang tên Debian 12 amd64, không phải binary chung cho mọi distro/kiến trúc.
 
-Mục tiêu là giảm thao tác trên các distro có package manager thông thường, không
-khẳng định một binary chạy trên mọi Linux. NixOS/Guix, Fedora Atomic/immutable và
-framework chạy trong Flatpak cần đóng gói theo hệ thống đó; script không tự ghi vào
-`/usr` của chúng. Distro lạ có thể chuẩn bị dependency rồi dùng `--no-deps`.
-Package names và kế hoạch đã kiểm thử tự động; cài thật trên từng distro, GUI GTK
-và tạo DEB/RPM vẫn cần kiểm chứng trong môi trường Linux.
+Thư viện core ở thư mục riêng và wrapper dùng `$ORIGIN` RPATH, không cần sửa
+`LD_LIBRARY_PATH`. Gói không chứa source, test, cache hoặc binary Windows.
 
 ## Một bảng điều khiển chung
 
@@ -100,7 +71,45 @@ viet-config --reload
 Không có một service gõ riêng bắt buộc phải bật: listener nằm trong tiến trình
 IBus/Fcitx5 đang nhúng core. GUI chỉ là controller độc lập. C ABI vẫn đúng năm hàm.
 
-## Build
+## Build DEB trên Windows bằng toolchain bên thứ ba
+
+```powershell
+.\build.ps1
+```
+
+Mặc định dùng **Zig 0.13.0** qua `ziglang`, `pyelftools` và `python-debian` để
+cross-compile/đóng gói trực tiếp trên Windows. Không cài hoặc khởi chạy Linux tạm,
+VM, WSL hay container. Cần Python >= 3.10, Rust/rustup >= 1.85 và Internet ở lần
+đầu tải công cụ/SDK. Tất cả công cụ, header và thư viện SDK nằm trong `target/`.
+Debian Packages index và từng gói SDK được kiểm SHA-256 trước khi giải nén.
+
+```text
+disk/
+  viet-ime_0.1.0_debian12_amd64_both.deb
+  INSTALL.txt
+  SHA256SUMS
+```
+
+Có thể chọn `--framework ibus`, `--framework fcitx5`, `--builder cross` hoặc
+`--platform linux/arm64`. Bản đã build/kiểm tra ở workspace này là **amd64**;
+ARM64 chưa được xác minh thực tế. Cross-builder hiện hỗ trợ DEB, chưa hỗ trợ RPM.
+Trên máy Linux đã có toolchain, `sh build.sh` vẫn có đường build/package native.
+
+Core và `viet-config` được cross-compile bằng Rust qua linker Zig; plugin IBus
+bằng Zig C, Fcitx5 bằng Zig C++ với **GNU libstdc++ ABI** tương thích SDK, tránh
+nhầm sang libc++ của Zig. Core có SONAME ổn định; wrapper không ghi đường dẫn
+Windows trong DT_NEEDED. Trước khi xuất gói, kiểm ELF machine, glibc requirement,
+đúng năm C exports, runtime dependencies và cấu trúc DEB qua thư viện python-debian.
+Có checksum và md5sums chuẩn cho nội dung package. `disk/` chỉ được thay sau khi
+build/kiểm tra thành công; không ghi đè tệp người dùng đã tự sửa trong đó.
+
+Đã tạo DEB thật trên Windows và kiểm tra cấu trúc/ELF/dependency. Chưa chạy cài đặt,
+GUI hoặc gõ trên desktop Linux thật; kiểm tra tĩnh không thay thế smoke-test đó.
+`viet-config` trong package là ELF Linux, không tạo `viet-config.exe` cho Windows.
+
+Mã nguồn sạch chỉ là tùy chọn riêng của nhà phát triển:
+`python packaging/build.py --source --skip-build`, không phải bộ cài cho người dùng.
+`install.sh` là đường build-from-source tùy chọn; không cần dùng khi cài file DEB.
 
 Core trên Windows hoặc Linux:
 
@@ -111,6 +120,10 @@ python3 tests/ffi_smoke.py
 ```
 
 Linux tạo `target/release/libviet_core.so`; Windows tạo `viet_core.dll`.
+Build mặc định chỉ tạo thư viện, không tạo `viet-config.exe` trên Windows.
+Ứng dụng `viet-config` chỉ hỗ trợ Linux và cần feature `config-app`:
+`cargo build --release --locked --features config-app`. Bộ cài/CMake Linux bật
+feature này tự động. Không bật `config-app` cho target Windows; cross-build từ Windows sang target Linux vẫn bật được feature này.
 Windows chạy `python` thay `python3`. Build core cần Rust >= 1.85. Build hai wrapper trên Linux cần CMake >= 3.16,
 pkg-config, C/C++ compiler, IBus >= 1.5.27 và Fcitx5 development packages:
 

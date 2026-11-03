@@ -1,0 +1,15 @@
+FROM fedora:44
+RUN dnf install -y gcc gcc-c++ make cmake pkgconf-pkg-config python3 curl ca-certificates \
+    rpm-build cpio binutils ibus-devel fcitx5-devel && dnf clean all
+ENV CARGO_HOME=/opt/cargo RUSTUP_HOME=/opt/rustup
+ENV PATH="/opt/cargo/bin:${PATH}"
+RUN case "$(uname -m)" in x86_64) arch=x86_64;; aarch64) arch=aarch64;; *) exit 1;; esac \
+    && url="https://static.rust-lang.org/rustup/dist/${arch}-unknown-linux-gnu/rustup-init" \
+    && curl -fLsS "$url" -o /tmp/rustup-init \
+    && curl -fLsS "$url.sha256" -o /tmp/rustup.sha256 \
+    && printf '%s  /tmp/rustup-init\n' "$(cut -d ' ' -f1 /tmp/rustup.sha256)" | sha256sum -c - \
+    && chmod +x /tmp/rustup-init \
+    && /tmp/rustup-init -y --profile minimal --default-toolchain stable --no-modify-path \
+    && rm /tmp/rustup-init /tmp/rustup.sha256
+WORKDIR /work
+COPY . .

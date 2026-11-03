@@ -15,7 +15,7 @@ endif()
 set(VIET_CORE_LIBRARY "${PROJECT_SOURCE_DIR}/target/release/libviet_core.so")
 add_custom_target(viet_core_build ALL
     COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${PROJECT_SOURCE_DIR}/target"
-            ${CARGO_EXECUTABLE} build --release --locked --manifest-path "${PROJECT_SOURCE_DIR}/core-rust/Cargo.toml"
+            ${CARGO_EXECUTABLE} build --release --locked --features config-app --manifest-path "${PROJECT_SOURCE_DIR}/core-rust/Cargo.toml"
     BYPRODUCTS "${VIET_CORE_LIBRARY}"
                "${PROJECT_SOURCE_DIR}/target/release/viet-config"
     WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
@@ -44,20 +44,46 @@ set(CPACK_PACKAGE_CONTACT "viet-ime contributors")
 set(CPACK_RESOURCE_FILE_LICENSE "${PROJECT_SOURCE_DIR}/LICENSE")
 set(CPACK_PACKAGING_INSTALL_PREFIX "${CMAKE_INSTALL_PREFIX}")
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-set(VIET_RUNTIME_DEPENDS zenity)
-if(VIET_BUILD_IBUS)
-    list(APPEND VIET_RUNTIME_DEPENDS ibus)
+if(VIET_BUILD_IBUS AND VIET_BUILD_FCITX5)
+    set(VIET_FRAMEWORK_REQUIREMENT "both")
+    set(VIET_DEB_FRAMEWORK_DEPENDS "ibus | fcitx5")
+    set(VIET_RPM_FRAMEWORK_DEPENDS "(ibus or fcitx5)")
+elseif(VIET_BUILD_IBUS)
+    set(VIET_FRAMEWORK_REQUIREMENT "ibus")
+    set(VIET_DEB_FRAMEWORK_DEPENDS "ibus")
+    set(VIET_RPM_FRAMEWORK_DEPENDS "ibus")
+else()
+    set(VIET_FRAMEWORK_REQUIREMENT "fcitx5")
+    set(VIET_DEB_FRAMEWORK_DEPENDS "fcitx5")
+    set(VIET_RPM_FRAMEWORK_DEPENDS "fcitx5")
 endif()
 if(VIET_BUILD_FCITX5)
-    list(APPEND VIET_RUNTIME_DEPENDS fcitx5)
     set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "fcitx5-frontend-all, fcitx5-config-qt")
 endif()
-string(REPLACE ";" ", " VIET_RUNTIME_DEPENDS "${VIET_RUNTIME_DEPENDS}")
-set(CPACK_DEBIAN_PACKAGE_DEPENDS "${VIET_RUNTIME_DEPENDS}")
+set(CPACK_DEBIAN_PACKAGE_DEPENDS "zenity, ${VIET_DEB_FRAMEWORK_DEPENDS}")
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS_PRIVATE_DIRS "${PROJECT_SOURCE_DIR}/target/release")
 set(CPACK_RPM_PACKAGE_AUTOREQ ON)
-set(CPACK_RPM_PACKAGE_REQUIRES "${VIET_RUNTIME_DEPENDS}")
+set(CPACK_RPM_PACKAGE_REQUIRES "zenity, ${VIET_RPM_FRAMEWORK_DEPENDS}")
 set(CPACK_RPM_PACKAGE_LICENSE "MIT")
 set(CPACK_RPM_EXCLUDE_FROM_AUTO_FILELIST_ADDITION
     /usr/lib /usr/lib64 /usr/libexec /usr/share/ibus /usr/share/ibus/component
     /usr/share/fcitx5 /usr/share/fcitx5/addon /usr/share/fcitx5/inputmethod)
 include(CPack)
+option(VIET_EXPORT_DISK "Expose a binary-package target that publishes to disk/" ON)
+if(VIET_EXPORT_DISK)
+    find_package(Python3 3.8 REQUIRED COMPONENTS Interpreter)
+    set(VIET_DISK_DEPENDS viet_core_build)
+    if(VIET_BUILD_IBUS)
+        list(APPEND VIET_DISK_DEPENDS ibus-viet-plugin)
+    endif()
+    if(VIET_BUILD_FCITX5)
+        list(APPEND VIET_DISK_DEPENDS viet)
+    endif()
+    # Not ALL: CPack preinstall builds ALL; making packaging part of ALL would recurse.
+    add_custom_target(viet_disk
+        COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/packaging/build.py"
+                --builder native --format deb --framework "${VIET_FRAMEWORK_REQUIREMENT}" --from-build "${PROJECT_BINARY_DIR}"
+        DEPENDS ${VIET_DISK_DEPENDS}
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+        VERBATIM)
+endif()

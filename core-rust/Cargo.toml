@@ -5,6 +5,16 @@ edition = "2021"
 rust-version = "1.85"
 license = "MIT"
 autotests = false
+autobins = false
+
+[features]
+default = []
+config-app = []
+
+[[bin]]
+name = "viet-config"
+path = "src/bin/viet-config.rs"
+required-features = ["config-app"]
 
 [lib]
 crate-type = ["rlib", "cdylib"]

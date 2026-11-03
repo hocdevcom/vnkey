@@ -1,4 +1,6 @@
-use std::{path::PathBuf, process::Command};
+use std::path::PathBuf;
+#[cfg(all(target_os = "linux", feature = "config-app"))]
+use std::process::Command;
 use viet_core::settings::Settings;
 
 fn directory(tag: &str) -> PathBuf {
@@ -56,6 +58,7 @@ fn editing_preserves_bamboo_reference_without_freezing_imported_rules() {
     );
 }
 #[test]
+#[cfg(all(target_os = "linux", feature = "config-app"))]
 fn controller_binary_updates_file_and_reports_offline_cores() {
     let root = directory("cli");
     let run = |args: &[&str]| {
@@ -81,7 +84,7 @@ fn controller_binary_updates_file_and_reports_offline_cores() {
     assert!(!run(&["--set-method", "invalid"]).status.success());
     assert_eq!(Settings::load(&config).unwrap().input_method, "VNI");
 }
-#[cfg(unix)]
+#[cfg(all(target_os = "linux", feature = "config-app"))]
 #[test]
 fn gui_uses_same_controller_without_framework_settings() {
     use std::os::unix::fs::PermissionsExt;
