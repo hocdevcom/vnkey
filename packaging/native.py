@@ -101,7 +101,7 @@ def native_package(args, root, work):
             execute([sys.executable,root / "tests/ffi_smoke.py"],root)
     version=re.search(r'^version\s*=\s*"([^"]+)"',(root / "core-rust/Cargo.toml").read_text(),re.M).group(1)
     arch=execute(["dpkg","--print-architecture"],root,capture_output=True,text=True).stdout.strip() if args.format=="deb" else platform.machine()
-    label="viet-ime_"+version+"_"+read_distro()+"_"+arch+"_"+args.framework
+    label="viet-ime_"+version+"_"+arch
     output=Path(tempfile.mkdtemp(prefix="cpack-",dir=work))
     execute(["cpack","--config",build / "CPackConfig.cmake","-G",GENERATORS[args.format],
         "-D","CPACK_PACKAGE_FILE_NAME="+label,"-B",output],root)

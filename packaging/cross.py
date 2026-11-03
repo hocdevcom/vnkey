@@ -67,7 +67,7 @@ def sdk(root, arch, framework, deb822, debfile, distro="debian12"):
                 match=re.match(r"\s*([a-z0-9][a-z0-9+.-]*)",alternative)
                 if match and match[1] in packages:
                     dep=match[1]
-                    if dep.startswith("lib") or dep=="linux-libc-dev":pending.append(dep)
+                    if dep.startswith("lib") or dep in ("linux-libc-dev","zlib1g","zlib1g-dev"):pending.append(dep)
                     break
     sysroot=cache / "sysroot";sysroot.mkdir(exist_ok=True)
     links=[];owners={}
@@ -102,7 +102,7 @@ def sdk(root, arch, framework, deb822, debfile, distro="debian12"):
             else:remaining.append((relative,target,name))
         if len(remaining)==len(links):break
         links=remaining
-    return sysroot,selected,owners
+    return sysroot,packages,owners
 
 def elf_info(path, ELFFile, glibc=(2,36)):
     with path.open("rb") as file:
@@ -143,6 +143,54 @@ def write_deb(path, control, payload):
             output.write(header);output.write(content)
             if len(content)%2:output.write(b"\n")
 
+def check_sdk_compatibility(payload, sysroot, packages, runtime, baseline, multiarch, ELFFile):
+    """Static ABI check against a second distro, not a desktop runtime test."""
+    from debian.debian_support import Version
+    for name in runtime:
+        if name not in packages or Version(str(packages[name]["Version"])) < Version(str(baseline[name]["Version"])):
+            raise RuntimeError("Target distro cannot satisfy package dependency: "+name)
+    if "zenity" not in packages or not any(name in packages for name in ("ibus","fcitx5")):
+        raise RuntimeError("Target distro lacks the GUI/framework runtime")
+    def metadata(path):
+        with path.open("rb") as file:
+            elf=ELFFile(file);dyn=elf.get_section_by_name(".dynamic")
+            needed=[t.needed for t in dyn.iter_tags() if t.entry.d_tag=="DT_NEEDED"] if dyn else []
+            symbols=elf.get_section_by_name(".dynsym")
+            defined={s.name for s in symbols.iter_symbols() if s.entry.st_shndx!="SHN_UNDEF"} if symbols else set()
+            required={s.name for s in symbols.iter_symbols() if s.name and s.entry.st_shndx=="SHN_UNDEF" and s.entry.st_info.bind!="STB_WEAK"} if symbols else set()
+            definitions=set();section=elf.get_section_by_name(".gnu.version_d")
+            if section:
+                for _,aux in section.iter_versions():definitions.update(a.name for a in aux)
+            versions={};section=elf.get_section_by_name(".gnu.version_r")
+            if section:
+                for item,aux in section.iter_versions():versions[item.name]={a.name for a in aux}
+            return needed,defined,required,definitions,versions
+    local={p.name:p for p in payload.rglob("*") if p.is_file() and p.read_bytes()[:4]==b"\x7fELF"}
+    def locate(name):
+        if name in local:return local[name]
+        for directory in ("usr/lib/"+multiarch,"lib/"+multiarch,"lib64","usr/lib64"):
+            path=sysroot / directory / name
+            if path.is_file():return path
+        raise RuntimeError("Target SDK missing shared library: "+name)
+    cache={}
+    def read(name):
+        if name not in cache:cache[name]=metadata(locate(name))
+        return cache[name]
+    for name in local:
+        pending=[name];seen=set();available=set();required=read(name)[2]
+        while pending:
+            current=pending.pop()
+            if current in seen:continue
+            seen.add(current);needed,defined,_,_,versions=read(current)
+            available.update(defined);pending.extend(needed)
+            # Validate symbol-version namespaces of the binaries we ship.
+            if current in local:
+                for provider,requested in versions.items():
+                    missing=requested-read(provider)[3]
+                    if missing:raise RuntimeError("Target ABI lacks symbol versions: "+provider+": "+str(sorted(missing)))
+        if required-available:raise RuntimeError("Target ABI missing symbols for "+name+": "+str(sorted(required-available)))
+    print("Debian-baseline payload satisfies Deepin SDK dependency versions, symbol names and symbol-version namespaces",flush=True)
+
 def run(args, root, publish):
     if args.format!="deb":raise RuntimeError("Zig cross-packaging currently supports --format deb; RPM needs a separate RPM builder")
     if sys.version_info<(3,10):raise RuntimeError("Cross-packaging requires Python >= 3.10")
@@ -152,7 +200,7 @@ def run(args, root, publish):
     distro=getattr(args,"distro","debian12")
     glibc=(2,38) if distro=="deepin25" else (2,36)
     multiarch=machine+"-linux-gnu";rust_target=machine+"-unknown-linux-gnu";zig_target=multiarch+"."+".".join(map(str,glibc))
-    sysroot,packages,owners=sdk(root,arch,args.framework,deb822,debfile,distro)
+    sysroot,packages,owners=sdk(root,arch,args.framework,deb822,debfile,"debian12" if distro=="common" else distro)
     work=root / "target/cross-build" / distro / arch;work.mkdir(parents=True,exist_ok=True)
     linker=work / ("zig-link.cmd" if os.name=="nt" else "zig-link")
     if os.name=="nt":linker.write_text('@echo off\n"'+str(zig)+'" cc -target '+zig_target+' %*\n',encoding="utf-8")
@@ -213,16 +261,20 @@ def run(args, root, publish):
             if not owner:raise RuntimeError("Missing SDK runtime library: "+dependency)
             runtime.add(owner)
     requires=[name+" (>= "+str(packages[name]["Version"])+")" for name in sorted(runtime)]
+    if distro=="common":
+        deepin_root,deepin_packages,_=sdk(root,arch,args.framework,deb822,debfile,"deepin25")
+        check_sdk_compatibility(payload,deepin_root,deepin_packages,runtime,packages,multiarch,ELFFile)
     requires += ["zenity","ibus | fcitx5" if args.framework=="both" else args.framework]
     size=(sum(path.stat().st_size for path in payload.rglob("*") if path.is_file())+1023)//1024
     control="Package: viet-ime\nVersion: 0.1.0\nArchitecture: "+arch+"\nMaintainer: Viet IME contributors <noreply@localhost>\nSection: utils\nPriority: optional\nInstalled-Size: "+str(size)+"\nDepends: "+", ".join(requires)+"\nDescription: Vietnamese input with a shared Rust core\n Precompiled IBus/Fcitx5 adapters and common settings controller.\n"
-    output=Path(tempfile.mkdtemp(prefix="release-",dir=work));package=output / ("viet-ime_0.1.0_"+distro+"_"+arch+"_"+args.framework+".deb")
+    label="debian12-deepin25" if distro=="common" else distro
+    output=Path(tempfile.mkdtemp(prefix="release-",dir=work));package=output / ("viet-ime_0.1.0_"+arch+".deb")
     write_deb(package,control,payload)
     check=debfile.DebFile(package)
     if check.debcontrol()["Architecture"]!=arch:raise RuntimeError("DEB metadata mismatch")
     if not check.data.tgz().getmembers():raise RuntimeError("Empty package")
     check.close()
-    (output / "INSTALL.txt").write_bytes(("Viet IME - precompiled "+distro+" / "+arch+"\n\nsudo apt install ./"+package.name+"\n\nNo Rust/compiler is required on the destination machine.\nCross-compiled with Zig; ELF/ABI/dependency metadata checked. Desktop runtime test still required.\n").encode())
+    (output / "INSTALL.txt").write_bytes(("Viet IME - precompiled "+label+" / "+arch+"\n\nsudo apt install ./"+package.name+"\n\nNo Rust/compiler is required on the destination machine.\nCross-compiled with Zig; ELF/ABI/dependency metadata checked. Desktop runtime test still required.\n").encode())
     (output / "SHA256SUMS").write_bytes((hashlib.sha256(package.read_bytes()).hexdigest()+"  "+package.name+"\n").encode())
     destination=publish(output,root,work,"viet-ime-binary-v1")
     print("Binary installer: "+str(destination / package.name))

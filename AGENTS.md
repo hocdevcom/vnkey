@@ -10,6 +10,11 @@
 
 # Kiến trúc viet-ime
 
+- Mục tiêu sản phẩm: hỗ trợ rộng distro/kiến trúc Linux bằng một core và các
+  wrapper mỏng, phát hành binary để máy đích không phải tự build. Không đồng nhất
+  "mọi Linux" với một file DEB: glibc/musl, ABI framework, kiến trúc CPU và định
+  dạng package cần build/kiểm chứng riêng. Chỉ công bố nền đã có bằng chứng.
+
 - Core Rust đặt tại `core-rust/`; thuật toán gõ nằm trong `composition.rs`,
   điều phối sự kiện và output nằm trong `engine.rs`.
 - Wrapper tại `wrappers/ibus-c/` và `wrappers/fcitx5-cpp/`, mỗi file plugin dưới
@@ -35,3 +40,6 @@
   source archive thành installer hay tạo DEB giả khi thiếu Linux builder.
 - Bản mã nguồn chỉ xuất khi yêu cầu rõ `--source`. Không chép test, cache,
   upstream, `target/`, cấu hình cá nhân hoặc binary Windows vào bản nguồn đó.
+
+- Tên gói phát hành dùng dạng chung `viet-ime_<version>_<arch>.<format>`, không
+  đưa distro hoặc framework vào tên file; giữ thông tin tương thích trong INSTALL.txt.

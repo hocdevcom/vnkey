@@ -1,5 +1,10 @@
 # viet-ime
 
+Mục tiêu: người dùng mọi nhóm Linux có thể cài binary phù hợp mà không tự build,
+với một core và giao diện chung. Các định dạng package, libc và kiến trúc khác
+nhau được quản lý qua [ma trận nền tảng](packaging/PLATFORMS.md); hiện chưa hoàn
+thành hỗ trợ mọi nền. Một file DEB chung chỉ áp dụng cho các nền tương thích đã kiểm.
+
 Bộ gõ tiếng Việt theo mô hình Rust core độc lập và hai adapter mỏng cho Linux.
 Core sở hữu thuật toán, trạng thái, cấu hình, chính sách ứng dụng và IPC. Wrapper
 không đọc cấu hình người dùng và không xử lý luật tiếng Việt.
@@ -28,11 +33,11 @@ Backspace và các ngoại lệ `gi`, `qu`, `ươi`, `uôi`, `uya`.
 
 ## Cài trên Linux bằng một file
 
-Chép `disk/viet-ime_0.1.0_debian12_amd64_both.deb` sang Debian 12 amd64 tương thích,
+Chép `disk/viet-ime_0.1.0_amd64.deb` sang Debian 12 hoặc Deepin 25 amd64 đã cập nhật,
 rồi chạy:
 
 ```sh
-sudo apt install ./viet-ime_0.1.0_debian12_amd64_both.deb
+sudo apt install ./viet-ime_0.1.0_amd64.deb
 ```
 
 Gói chứa core, `viet-config` và cả hai wrapper **đã biên dịch thành ELF**. Máy đích
@@ -43,7 +48,7 @@ không cần Rust, Cargo, CMake hay compiler; apt chỉ cài runtime dependency.
 Sau cài, đăng xuất/đăng nhập, thêm **Viet IME** trong Input Sources/Input Method;
 mở **Viet IME Settings** để đổi kiểu gõ. Gỡ bằng `sudo apt remove viet-ime`.
 Không ghi đè cấu hình input sources/environment hoặc tự bật hai framework cùng lúc.
-Gói mang tên Debian 12 amd64, không phải binary chung cho mọi distro/kiến trúc.
+Đây là một gói chung cho Debian 12 và Deepin 25 amd64, không phải mọi distro/kiến trúc.
 
 Thư viện core ở thư mục riêng và wrapper dùng `$ORIGIN` RPATH, không cần sửa
 `LD_LIBRARY_PATH`. Gói không chứa source, test, cache hoặc binary Windows.
@@ -85,17 +90,19 @@ VM, WSL hay container. Cần Python >= 3.10, Rust/rustup >= 1.85 và Internet �
 đầu tải công cụ/SDK. Tất cả công cụ, header và thư viện SDK nằm trong `target/`.
 Debian Packages index và từng gói SDK được kiểm SHA-256 trước khi giải nén.
 
-`--distro deepin25` lấy header/runtime từ kho Deepin **crimson**, cross-compile
-cho glibc 2.38 và sinh `viet-ime_0.1.0_deepin25_amd64_both.deb` trong `disk/`.
-Đây là build bằng SDK Deepin riêng, không đổi tên gói Debian. Cài bằng
-`sudo apt install ./viet-ime_0.1.0_deepin25_amd64_both.deb`.
-Deepin 25 cho phép apt/dpkg cài DEB qua cơ chế Solid, không cần tắt bảo vệ hệ thống:
-[FAQ chính thức](https://www.deepin.org/en/qa-deepin-25-qa-2/).
-Chưa xác minh cài/chạy trên desktop Deepin; ELF/dependency checks chỉ là kiểm tra tĩnh.
+Mặc định `--distro common`: compile bằng nền Debian 12/glibc 2.36 rồi đối chiếu
+các runtime dependency, symbol và symbol-version của payload với SDK Deepin 25.
+Xuất **một file** `viet-ime_0.1.0_amd64.deb` dùng cho cả hai.
+Dependency tối thiểu giữ theo Debian 12, không nâng lên phiên bản Deepin khiến
+Debian không cài được. Không chép thư viện hệ thống của distro vào package.
+
+`--distro debian12` hoặc `--distro deepin25` chỉ dành cho build chuyên biệt khi cần;
+không phải quy trình cài đặt mặc định. Kiểm tra SDK tĩnh không thay thế chạy thử
+trên desktop thật. Deepin 25 hỗ trợ apt/dpkg cài DEB qua Solid mà không cần tắt bảo vệ.
 
 ```text
 disk/
-  viet-ime_0.1.0_debian12_amd64_both.deb
+  viet-ime_0.1.0_amd64.deb
   INSTALL.txt
   SHA256SUMS
 ```

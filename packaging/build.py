@@ -183,7 +183,7 @@ def export(root=ROOT):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Build a precompiled Linux installer into disk/ (DEB by default).")
     parser.add_argument("--format", choices=["deb", "rpm", "tar"], default="deb")
-    parser.add_argument("--distro", choices=["debian12", "deepin25"], default="debian12")
+    parser.add_argument("--distro", choices=["common", "debian12", "deepin25"], default="common")
     parser.add_argument("--framework", choices=["both", "ibus", "fcitx5"], default="both")
     parser.add_argument("--builder", choices=["auto", "cross", "native", "docker", "podman"], default="auto")
     parser.add_argument("--platform", choices=["linux/amd64", "linux/arm64"], default="linux/amd64")
@@ -195,8 +195,8 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if not args.source:
         if args.skip_build: parser.error("--skip-build is only valid with --source; binary packages must be compiled")
-        use_cross=args.builder=="cross" or (args.builder=="auto" and (sys.platform!="linux" or args.distro=="deepin25"))
-        if args.distro=="deepin25" and not use_cross: parser.error("--distro deepin25 requires --builder cross")
+        use_cross=args.builder=="cross" or (args.builder=="auto" and (sys.platform!="linux" or args.distro in ("common","deepin25")))
+        if args.distro in ("common","deepin25") and not use_cross: parser.error("This distro profile requires --builder cross; use --distro debian12 for native builds")
         spec = importlib.util.spec_from_file_location("viet_native", ROOT / ("packaging/cross.py" if use_cross else "packaging/native.py"))
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)

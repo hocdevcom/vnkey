@@ -40,7 +40,7 @@ class CrossPackageTests(unittest.TestCase):
         self.assertEqual(len(packages),1)
         deb=DebFile(packages[0]);control=deb.debcontrol()
         self.assertEqual(control["Architecture"],"amd64")
-        if "deepin25" in packages[0].name:
+        if "deepin25" in packages[0].name and "debian12-deepin25" not in packages[0].name:
             self.assertIn("deepin",control["Depends"])
             self.assertIn("libfcitx5core7 (>= 5.1.12",control["Depends"])
         for name in ("cargo","rustc","cmake","build-essential"):
