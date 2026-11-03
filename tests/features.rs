@@ -1,6 +1,6 @@
 use viet_core::{
+    composition::{Engine, DEFAULT_FLAGS},
     config::{BambooConfig, MacroTable},
-    engine::{Engine, DEFAULT_FLAGS},
     rules::InputMethod,
 };
 
@@ -67,24 +67,34 @@ fn restore_and_delete() {
     assert_eq!(e.text(), "tôi");
 }
 #[test]
-fn c_abi_ownership_and_nulls() {
+fn c_abi_borrowed_strings_and_nulls() {
     use viet_core::ffi::*;
     unsafe {
-        let e = viet_engine_new(7);
+        let e = viet_engine_new();
         assert!(!e.is_null());
-        assert!(viet_engine_process(e, c"tieengs Vieetj".as_ptr()));
-        let text = viet_engine_text(e);
-        assert_eq!(
-            std::ffi::CStr::from_ptr(text).to_str().unwrap(),
-            "tiếng Việt"
+        viet_engine_set_app_id(e, c"unknown-app".as_ptr());
+        let mut actual = String::new();
+        for c in "tieengs Vieetj".chars() {
+            let result = viet_engine_process_key(e, c as u32, 0, 0);
+            assert!(!result.preedit_str.is_null());
+            let commit = std::ffi::CStr::from_ptr(result.commit_str)
+                .to_str()
+                .unwrap();
+            actual.push_str(commit);
+        }
+        let result = viet_engine_process_key(e, viet_core::engine::KEY_FLUSH, 0, 0);
+        actual.push_str(
+            std::ffi::CStr::from_ptr(result.commit_str)
+                .to_str()
+                .unwrap(),
         );
-        viet_string_free(text);
-        assert!(!viet_engine_key(e, 0x11_0000));
-        assert!(!viet_engine_key(std::ptr::null_mut(), 'a' as u32));
-        viet_engine_backspace(e);
+        assert_eq!(actual, "tiếng Việt");
+        assert_eq!(
+            viet_engine_process_key(std::ptr::null_mut(), 97, 0, 0).action_type,
+            0
+        );
         viet_engine_reset(e);
         viet_engine_free(e);
         viet_engine_free(std::ptr::null_mut());
-        viet_string_free(std::ptr::null_mut());
     }
 }

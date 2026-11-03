@@ -78,7 +78,7 @@ impl BambooConfig {
             .unwrap_or(self.default_input_mode)
             == 7
     }
-    pub fn engine(&self) -> Option<crate::engine::Engine> {
+    pub fn engine(&self) -> Option<crate::composition::Engine> {
         let method = if let Some(def) = self.input_method_definitions.get(&self.input_method) {
             crate::rules::InputMethod::from_definition(
                 def.iter()
@@ -87,6 +87,6 @@ impl BambooConfig {
         } else {
             crate::rules::InputMethod::builtin(&self.input_method)?
         };
-        Some(crate::engine::Engine::new(method, self.flags))
+        Some(crate::composition::Engine::new(method, self.flags))
     }
 }

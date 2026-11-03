@@ -1,0 +1,16 @@
+input_method = "Telex" # Telex, Telex 2, VNI
+enabled = true
+flags = 7 # 1 free-mark, 2 hòa/ủy style, 4 legacy reserved
+# Optional relative to this TOML file, or an absolute path; no ~ expansion:
+# bamboo_config = "../ibus-bamboo/ibus-bamboo.config.json"
+
+[apps]
+default_mode = "Preedit"
+use_builtin_profiles = true
+
+[apps.rules]
+"google-chrome:Google-chrome" = "SurroundingText"
+"code" = "BackspaceCommit"
+"org.telegram.desktop" = "BackspaceCommit"
+"org.gnome.Terminal" = "Preedit"
+# "excluded-app" = "Disabled"

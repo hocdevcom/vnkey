@@ -1,7 +1,7 @@
 """Generate reproducible per-keystroke Go reference fixtures (Go oracle required)."""
 import json, pathlib, random, re, subprocess
 root = pathlib.Path(__file__).resolve().parents[2]
-source = (root / 'upstream/bamboo-core/bamboo_test.go').read_text(encoding='utf-8')
+source = (root / 'tests/upstream/bamboo-core/bamboo_test.go').read_text(encoding='utf-8')
 words = set(re.findall(r'ProcessString\("([^"\n]*)"', source))
 words.update(['ass','hoaf','uyr','toasn','gisa','gieengs','quawcj','nguwowfi','muoosi','khuya','loanj\b','chuyrene','turyn\b\b'])
 rng = random.Random(421)

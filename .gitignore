@@ -1,3 +1,5 @@
 /target/
-/upstream/
 /tests/tools/oracle.exe
+/tests/upstream/
+/tests/artifacts/
+**/__pycache__/

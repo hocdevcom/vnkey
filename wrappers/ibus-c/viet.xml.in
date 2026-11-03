@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component>
+  <name>org.freedesktop.IBus.Viet</name>
+  <description>Vietnamese input method with independent Rust core</description>
+  <exec>@CMAKE_INSTALL_FULL_LIBEXECDIR@/viet-ime/ibus-viet-plugin --ibus</exec>
+  <version>@PROJECT_VERSION@</version>
+  <license>MIT</license>
+  <author>viet-ime contributors</author>
+  <homepage>https://github.com/BambooEngine/bamboo-core</homepage>
+  <engines>
+    <engine>
+      <name>viet</name>
+      <longname>Viet IME</longname>
+      <description>Vietnamese input using viet-core</description>
+      <language>vi</language>
+      <license>MIT</license>
+      <author>viet-ime contributors</author>
+      <layout>us</layout>
+      <symbol>vi</symbol>
+      <icon>input-keyboard</icon>
+    </engine>
+  </engines>
+</component>

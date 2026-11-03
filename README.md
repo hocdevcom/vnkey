@@ -1,84 +1,200 @@
-# viet-core
+# viet-ime
 
-Engine gõ tiếng Việt Rust thuần, xuất `rlib` và `cdylib`, chuyển thể từ
-[BambooEngine/bamboo-core](https://github.com/BambooEngine/bamboo-core)
-commit `b2e49a2b48c7d3772a3673142a7747eccd9d5f79` (MIT).
-Giữ thông báo bản quyền nguồn trong `LICENSE`. Không dùng Go runtime/cgo.
+Bộ gõ tiếng Việt theo mô hình Rust core độc lập và hai adapter mỏng cho Linux.
+Core sở hữu thuật toán, trạng thái, cấu hình, chính sách ứng dụng và IPC. Wrapper
+không đọc cấu hình người dùng và không xử lý luật tiếng Việt.
 
-## Build và sử dụng
+```text
+core-rust/
+  src/composition.rs        thuật toán Transformation đã đối chiếu Go
+  src/syllable.rs           Unicode, liên kết mục tiêu, tách CVC/gi/qu
+  src/rules.rs              luật DSL, ma trận chính tả, 9 bảng gõ
+  src/engine.rs             xử lý key, app profile, action
+  src/app_profile.rs        chính sách output theo App ID/WM_CLASS
+  src/settings.rs           cấu hình TOML do core đọc
+  src/ipc.rs                Unix socket và cấu hình chia sẻ trong tiến trình
+  src/ffi.rs                đúng 5 symbol C, kết quả chuỗi mượn
+  include/viet_core.h        hợp đồng ABI cho cả hai framework
+wrappers/ibus-c/engine.c     IBusEngine C
+wrappers/fcitx5-cpp/engine.cpp  InputMethodEngineV2 C++
+tests/                      toàn bộ test, fixture, công cụ và dữ liệu tham chiếu
+```
+
+Core không liên kết IBus, Fcitx5, X11 hoặc Wayland; không dùng Go runtime/cgo.
+Thuật toán được chuyển thể từ [bamboo-core](https://github.com/BambooEngine/bamboo-core)
+commit `b2e49a2b48c7d3772a3673142a7747eccd9d5f79` (MIT, thông báo trong LICENSE).
+Giữ các phép biến đổi và mục tiêu trong arena; hỗ trợ free-mark, undo, dịch dấu,
+Backspace và các ngoại lệ `gi`, `qu`, `ươi`, `uôi`, `uya`.
+
+## Build
+
+Core trên Windows hoặc Linux:
 
 ```sh
-cargo test --release
-cargo build --release
+cargo test --release --locked
+cargo build --release --locked
+python3 tests/ffi_smoke.py
 ```
 
-Linux tạo `target/release/libviet_core.so`, Windows tạo `target/release/viet_core.dll`.
-Header C/C++: `include/viet_core.h`. Mỗi engine dùng riêng cho một input context;
-frontend phải tuần tự hóa lời gọi trên cùng handle. Chuỗi trả về thuộc caller,
-giải phóng bằng `viet_string_free`; handle giải phóng bằng `viet_engine_free`.
-`viet_engine_key` nhận Unicode scalar, không nhận X11/IBus keysym.
-Frontend xử lý các phím điều khiển, commit/preedit, ranh giới từ và reset engine.
-Kho chứa này chưa có adapter IBus/Fcitx5 hay kiểm thử tích hợp desktop Linux.
+Linux tạo `target/release/libviet_core.so`; Windows tạo `viet_core.dll`.
+Windows chạy `python` thay `python3`. Build hai wrapper trên Linux cần CMake >= 3.16,
+pkg-config, C/C++ compiler, IBus >= 1.5.27 và Fcitx5 development packages:
 
-```rust
-use viet_core::Engine;
-let mut engine = Engine::default();
-engine.process("tieengs Vieetj");
-assert_eq!(engine.text(), "tiếng Việt");
+```sh
+# Ví dụ Debian/Ubuntu, cài dependencies qua package manager nếu chưa có:
+# sudo apt install build-essential cmake pkg-config libibus-1.0-dev libfcitx5core-dev libfcitx5utils-dev
+cmake -S . -B tests/artifacts/linux-build -DCMAKE_INSTALL_PREFIX=/usr
+cmake --build tests/artifacts/linux-build --parallel
+# Chỉ khi muốn cài vào hệ thống:
+# sudo cmake --install tests/artifacts/linux-build
 ```
 
-`Engine::text()` và `raw()` trả về toàn composition. `reset()` sau commit để giới
-hạn bộ nhớ. `backspace(true)` xóa ký tự hiển thị cùng các phép biến đổi liên quan,
-không chỉ xóa phím vật lý cuối. `restore_last_word(false/true)` khôi phục phím gốc/
-xử lý lại tiếng Việt. Arena giữ chỉ số mục tiêu ổn định trong mỗi thao tác;
-các node thử nghiệm được loại sau mỗi phím.
+`-DVIET_BUILD_IBUS=OFF` hoặc `-DVIET_BUILD_FCITX5=OFF` để build một framework.
+Metadata đăng ký IBus/Fcitx5 đi kèm. Sau khi cài, restart framework và thêm **Viet IME**.
+Không chạy đồng thời hai framework trên cùng input context.
+Hai file adapter đều dưới 250 dòng. Rust core đã build/test trên Windows và kiểm tra
+biên dịch cả nhánh Unix bằng target `x86_64-unknown-linux-gnu`; việc build và smoke-test
+hai adapter với framework thật trên Linux chưa được thực hiện trong môi trường này.
+`sh tests/run-linux.sh` cung cấp các bước kiểm tra Linux, gồm test socket và build wrapper.
 
-`src/syllable.rs`: transformation arena, Unicode, tách CVC và ngoại lệ gi/qu.
-`src/rules.rs`: luật DSL, các bảng chính tả và bitmask quan hệ âm đầu/nguyên âm/âm cuối.
-`src/engine.rs`: tìm mục tiêu, undo, free-mark, shortcut uow, dịch dấu.
-Giữ cách tách CVC của Bamboo: âm đệm nằm trong các chuỗi nguyên âm, không có cây
-âm tiết/trie hoặc enum Labial riêng trong nguồn Go này.
+## C ABI: đúng 5 hàm
 
-Flags giống Go: bit 1 (`FREE_MARK`), bit 2 (`STANDARD_TONE`), bit 4 dự phòng theo
-`EautoCorrectEnabled` nguồn Go (nguồn được pin không dùng bit này trong xử lý).
-Mặc định 7 cho `hòa`, `ủy`; 5 cho `hoà`, `uỷ`. Tên “cũ/mới” trong yêu cầu không
-được dùng làm tên API để tránh nhầm với tên cờ của Bamboo.
-Toàn bộ 9 bảng gõ có sẵn trong `src/input_methods.json`, truy cập qua
-`InputMethod::builtin(name)`. `InputMethod::from_definition` nhận bảng DSL tùy chỉnh.
+```c
+VietEngine *viet_engine_new(void);
+void viet_engine_free(VietEngine *engine);
+void viet_engine_set_app_id(VietEngine *engine, const char *app_id);
+CActionResult viet_engine_process_key(VietEngine *engine, uint32_t keyval,
+                                     uint32_t keycode, uint32_t modifiers);
+void viet_engine_reset(VietEngine *engine);
+```
 
-## Dữ liệu Bamboo
+Đây là ABI mới, thay ABI thử nghiệm trước đó. `CActionResult` chứa `action_type`,
+`backspace_count`, `preedit_str`, `commit_str`. Chuỗi UTF-8 do handle sở hữu, hiệu lực
+đến lời gọi thay đổi tiếp theo trên cùng handle hoặc khi free. Caller không giải
+phóng chuỗi; không cần hàm free-result thứ sáu. Một handle cho mỗi input context,
+không gọi đồng thời/reentrant trên một handle. Handle khác có composition riêng.
+`new()` trả NULL nếu khởi tạo cấu hình/socket lỗi; wrapper cho phím đi thẳng khi NULL.
 
-`MacroTable::load(path, ignore_case)` đọc `key:value`, bỏ dòng comment `;`/`#`,
-trim hai phía, mục sau ghi đè mục trước. Giống Bamboo, dòng có hơn một dấu `:`
-bị bỏ qua. Đọc cả dòng cuối không có newline. Chỉ tra cứu dữ liệu; frontend quyết
-định thời điểm mở rộng macro và chuyển hoa.
+| Action | Wrapper thực hiện |
+|---|---|
+| Ignore | Vẫn áp dụng chuỗi preedit/commit trả về, rồi cho phím gốc đi qua |
+| Preedit | Thay toàn preedit; có thể kèm commit của composition trước khi đổi cấu hình |
+| Commit | Xóa preedit và commit chuỗi mới |
+| DeleteSurrounding | Xóa `backspace_count` ký tự trước cursor, rồi commit suffix |
+| FakeBackspace | Forward `backspace_count` cặp Backspace press/release, rồi commit suffix |
 
-`BambooConfig::load(path)` đọc JSON cấu hình từ
-`~/.config/ibus-bamboo/ibus-bamboo.config.json`; macro thường ở
-`~/.config/ibus-bamboo/ibus-bamboo.macro.text`.
-Danh sách loại trừ là `InputModeMapping` với mode **7** (`UsIM`), so khớp chính xác
-WM_CLASS như Bamboo, không phải file blacklist riêng. `is_excluded` dùng
-`DefaultInputMode` khi không có mapping hợp lệ. `engine()` sử dụng InputMethod,
-Flags và InputMethodDefinitions trong cấu hình. Parser định dạng được viết riêng;
-không sao chép mã frontend GPL của ibus-bamboo.
+`backspace_count` đếm Unicode scalar, không phải byte UTF-8. Core chỉ thay suffix sau
+tiền tố chung để giảm số lần xóa. Các action khác Ignore tiêu thụ phím gốc, kể cả
+Commit với chuỗi rỗng. Wrapper không tự tính dấu, diff hoặc quyết định mode.
 
-## Kiểm chứng và giới hạn
+Phím vào là keysym IBus/Fcitx/XKB: Latin-1 hoặc `0x01000000 | Unicode scalar`.
+Các phím Backspace, Escape, Return, Tab, điều hướng do core phân loại. `keycode`
+được dành cho metadata framework, hiện không dùng để quyết định thuật toán.
+Modifier phải chuyển về các bit `VIET_*` trong header; không truyền bitmask framework
+trực tiếp. Release/synthetic forwarded events không cập nhật output hoặc composition.
 
-Tất cả tệp kiểm thử, fixture và công cụ hỗ trợ nằm trong `tests/`;
-script/công cụ đặt trong `tests/tools/`. Không tạo tệp kiểm thử rải rác bên ngoài
-thư mục này. Quy ước làm việc được ghi trong `AGENTS.md`.
+Khi focus-in, truyền App ID vào `set_app_id`; khi focus-out, gọi `process_key` với
+`VIET_KEY_FLUSH`, áp dụng kết quả, rồi `reset`. Flush có thể trả Ignore cùng commit
+để chốt preedit; sentinel không được chuyển tới ứng dụng. `reset` đơn thuần bỏ
+composition. Gọi reset khi ứng dụng thay đổi cursor/selection/text bên ngoài core;
+framework phải cung cấp tín hiệu đó. Phím điều hướng/phím tắt được core tự chốt từ
+và trả Ignore để framework chuyển tiếp. Password/sensitive fields truyền `VIET_SENSITIVE`.
 
-`tests/go_reference.json`: 22.548 ca, 158.580 trạng thái sau phím, sinh từ Go đã pin,
-so sánh text/raw/IsValid(false) trên Telex, Telex 2, VNI, VIQR và flags 7/5/0;
-bao gồm chuỗi ngẫu nhiên xác định seed và Backspace. Chạy fixture không cần Go.
-Đây là bằng chứng trên tập kiểm thử, không phải chứng minh tương đương cho mọi
-chuỗi Unicode hay mọi bảng DSL tùy chỉnh. Chưa benchmark hoặc tối ưu để khẳng định
-hiệu năng tối đa. Chưa port các output charset legacy, encoder hoặc toàn bộ Mode
-bitmask của Go; đầu ra thư viện này là Unicode UTF-8.
+## Chính sách ứng dụng
 
-Tái sinh fixture: clone nguồn Go vào `upstream/bamboo-core`, checkout commit trên,
-Chạy `go build -o ../../tests/tools/oracle.exe ../../tests/tools/oracle.go` từ
-clone rồi chạy `python tests/tools/make_fixtures.py` từ repo.
-Go chỉ phục vụ tạo dữ liệu kiểm thử.
-Nguồn cấu hình tham chiếu: ibus-bamboo commit
-`49e03d7a36b8a8b796950c158b545af8cf9707d4`.
+Ba output mode: `Preedit`, `SurroundingText`, `BackspaceCommit`.
+Mapping người dùng so khớp chính xác, có phân biệt hoa thường, được ưu tiên cao nhất.
+Alias mặc định so khớp tên đầy đủ hoặc thành phần WM_CLASS/client-name, không dùng
+substring hoặc wildcard. Không suy đoán mọi app Electron/Wine từ một tên chung.
+
+| Nhóm mặc định | Mode yêu cầu |
+|---|---|
+| Firefox, Chrome, Chromium | SurroundingText |
+| VS Code/Codium, Telegram | BackspaceCommit |
+| Terminal và ứng dụng chưa biết | Preedit |
+
+Wrapper báo `VIET_CAP_SURROUNDING` theo capabilities của client; nếu thiếu, core
+chuyển SurroundingText sang BackspaceCommit. Core không tự truy cập framework để
+thăm dò capabilities. Các tên trình duyệt tham khảo `DefaultBrowserList` của
+[ibus-bamboo/utils.go](https://github.com/BambooEngine/ibus-bamboo/blob/49e03d7a36b8a8b796950c158b545af8cf9707d4/utils.go).
+Các lựa chọn mode/alias IDE và terminal là chính sách bổ sung của viet-ime, không
+phải bảng mặc định upstream được kiểm chứng cho mọi phiên bản ứng dụng.
+
+IBus `focus-in-id` cung cấp client type/name, không bảo đảm WM_CLASS hay App ID thực.
+`gtk3-im:firefox` có thể nhận diện; `Qt`, `xim`, `gnome-shell` chung dùng mặc định.
+Adapter này không mở X11/compositor connection để đoán cửa sổ đang active.
+Fcitx5 dùng `InputContext::program()` và trạng thái riêng theo InputContextProperty,
+theo mô hình lifecycle của Lotus.
+
+FakeBackspace ở đây dùng forwarding API của framework, không phải XTest/uinput.
+Wrapper gửi các lệnh xóa trước commit; chưa có hàng đợi xác nhận hoàn tất async,
+native uinput hay cơ chế delay/ack đầy đủ như Lotus. App ID cũng không phân biệt
+thanh địa chỉ với ô soạn thảo trong cùng trình duyệt. Vì vậy đây là nền tảng action
+và adapter mẫu, chưa phải cam kết hết lỗi nhảy chữ trên mọi ứng dụng.
+
+## Cấu hình và IPC do core sở hữu
+
+Copy nội dung `core-rust/config.example.toml` vào
+`~/.config/viet-ime/config.toml` (hoặc `$XDG_CONFIG_HOME/viet-ime/config.toml`).
+Không có file thì dùng mặc định; cấu hình sai bị từ chối. Core không ghi đè cấu hình
+người dùng. Hỗ trợ `input_method = "Telex" / "Telex 2" / "VNI"`, `enabled`, `flags`,
+`[apps]` và `[apps.rules]`; rule `"Disabled"` cho ứng dụng loại trừ.
+Flags 7 cho `hòa`, `ủy`; 5 cho `hoà`, `uỷ`; bit 4 giữ chỗ theo nguồn Go.
+
+`bamboo_config` tùy chọn trỏ tới JSON cũ: import `InputModeMapping` và
+`DefaultInputMode`, không import tùy chọn framework. Mode 1 -> Preedit, 2 ->
+SurroundingText, 3..6 -> BackspaceCommit, 7 -> Disabled; rule TOML trùng key thắng.
+Mode 3..6 được hợp nhất theo kiến trúc ba mode mới, không mô phỏng Shift+Left hoặc
+forward Unicode của ABI cũ. Parser macro `config::MacroTable` vẫn đọc dữ liệu
+`key:value` của Bamboo; dispatcher hiện chưa tự mở rộng macro.
+
+Mỗi tiến trình host có một socket:
+`$XDG_RUNTIME_DIR/viet-ime/core-<pid>.sock`. Không có XDG_RUNTIME_DIR thì dùng
+`<config-dir>/run/viet-ime/core-<pid>.sock`. Thư mục riêng mode 0700, socket 0600.
+Nhiều handle chia sẻ cấu hình, không chia sẻ trạng thái từ. Có thể tồn tại một socket
+cho IBus và một socket cho Fcitx5; controller gửi đến từng socket nếu muốn đồng bộ cả hai.
+
+Protocol: một JSON UTF-8 kết thúc bằng newline trên mỗi connection, tối đa 4096 byte,
+deadline đọc 100 ms; trả một JSON có `ok`, `revision`, `settings` hoặc `error`.
+
+```json
+{"command":"status"}
+{"command":"set_input_method","value":"VNI"}
+{"command":"set_enabled","value":false}
+{"command":"toggle"}
+{"command":"reload"}
+```
+
+Ví dụ: `printf '%s\n' '{"command":"set_input_method","value":"VNI"}' | socat - UNIX-CONNECT:"$XDG_RUNTIME_DIR/viet-ime/core-1234.sock"`.
+Lệnh set/toggle áp dụng trong bộ nhớ; reload đọc lại TOML. Cấu hình được lấy ở sự kiện
+phím tiếp theo; preedit cũ được commit trước khi bắt đầu composition mới, text đã
+commit trong fallback được giữ nguyên. Thread IPC không gọi framework hoặc sửa
+composition từ nền. Khi handle cuối cùng được free, listener dừng/join và socket
+được dọn. Windows vẫn chạy core/dispatcher, không mở Unix listener.
+
+## Kiểm chứng và nguồn tham chiếu
+
+Tất cả tệp test, fixture, script, binary hỗ trợ và dữ liệu tham chiếu nằm dưới
+`tests/`, theo `AGENTS.md`; sản phẩm Cargo nằm trong `target/`.
+`tests/go_reference.json` có 22.548 ca, 158.580 trạng thái sau phím so với Go đã pin:
+text/raw/IsValid(false), Telex/Telex 2/VNI/VIQR, flags 7/5/0 và Backspace.
+Các test output mô phỏng client áp dụng action, kiểm tra suffix Unicode, undo,
+focus, capabilities, shortcut, cấu hình chia sẻ và cô lập context. Test IPC gồm
+kiểm tra command/validation và bài test listener/reload/shutdown chỉ chạy trên Unix.
+`tests/ffi_smoke.py` gọi thư viện động thật, kiểm tra lifetime chuỗi và đúng 5 exports.
+
+Tái sinh fixture: clone Go vào `tests/upstream/bamboo-core`, checkout commit đã pin;
+trong clone chạy `go build -o ../../tools/oracle.exe ../../tools/oracle.go`, rồi từ
+gốc repo chạy `python tests/tools/make_fixtures.py`. Go chỉ dùng để tạo fixture.
+
+Nguồn frontend tham khảo, chỉ dùng để hiểu hành vi/API, không sao chép triển khai GPL:
+
+- ibus-bamboo: `49e03d7a36b8a8b796950c158b545af8cf9707d4`.
+- [fcitx5-lotus](https://github.com/LotusInputMethod/fcitx5-lotus),
+  commit `2cd42cf40f5e270370c31e000cb9f044b0e8ce3d`, `lotus-engine.cpp`,
+  `lotus-state.cpp`, `lotus-mode.h` (mode và lifecycle).
+- [Fcitx InputMethodEngineV2](https://github.com/fcitx/fcitx5/blob/master/src/lib/fcitx/inputmethodengine.h)
+  và [IBusEngine](https://github.com/ibus/ibus/blob/main/src/ibusengine.h) (API adapter).
+
+Chưa benchmark hiệu năng hoặc port encoder/charset legacy. Tập test không chứng
+minh tương đương Go cho mọi chuỗi Unicode/DSL và không thay thế kiểm thử desktop Linux.
