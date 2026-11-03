@@ -75,6 +75,8 @@ IBus/Fcitx5 đang nhúng core. GUI chỉ là controller độc lập. C ABI vẫ
 
 ```powershell
 .\build.ps1
+# Deepin 25, bao gồm dòng 25.2, x86_64:
+.\build.ps1 --distro deepin25
 ```
 
 Mặc định dùng **Zig 0.13.0** qua `ziglang`, `pyelftools` và `python-debian` để
@@ -82,6 +84,14 @@ cross-compile/đóng gói trực tiếp trên Windows. Không cài hoặc khởi
 VM, WSL hay container. Cần Python >= 3.10, Rust/rustup >= 1.85 và Internet ở lần
 đầu tải công cụ/SDK. Tất cả công cụ, header và thư viện SDK nằm trong `target/`.
 Debian Packages index và từng gói SDK được kiểm SHA-256 trước khi giải nén.
+
+`--distro deepin25` lấy header/runtime từ kho Deepin **crimson**, cross-compile
+cho glibc 2.38 và sinh `viet-ime_0.1.0_deepin25_amd64_both.deb` trong `disk/`.
+Đây là build bằng SDK Deepin riêng, không đổi tên gói Debian. Cài bằng
+`sudo apt install ./viet-ime_0.1.0_deepin25_amd64_both.deb`.
+Deepin 25 cho phép apt/dpkg cài DEB qua cơ chế Solid, không cần tắt bảo vệ hệ thống:
+[FAQ chính thức](https://www.deepin.org/en/qa-deepin-25-qa-2/).
+Chưa xác minh cài/chạy trên desktop Deepin; ELF/dependency checks chỉ là kiểm tra tĩnh.
 
 ```text
 disk/

@@ -39,18 +39,19 @@ def download(url, path, expected=None):
         temporary.unlink();raise RuntimeError("SDK checksum mismatch: "+path.name)
     os.replace(temporary,path)
 
-def sdk(root, arch, framework, deb822, debfile):
-    base="https://deb.debian.org/debian/"
-    cache=root / "target/cross-sdk" / arch
+def sdk(root, arch, framework, deb822, debfile, distro="debian12"):
+    base="https://community-packages.deepin.com/deepin/beige/" if distro=="deepin25" else "https://deb.debian.org/debian/"
+    suite="crimson" if distro=="deepin25" else "bookworm"
+    cache=root / "target/cross-sdk" / ("deepin25-"+arch if distro=="deepin25" else arch)
     cache.mkdir(parents=True,exist_ok=True)
     index=cache / "Packages.xz"
     if not index.exists():
-        release=urllib.request.urlopen(base+"dists/bookworm/Release",timeout=60).read().decode()
+        release=urllib.request.urlopen(base+"dists/"+suite+"/Release",timeout=60).read().decode()
         key="main/binary-"+arch+"/Packages.xz"
         sha_section=release.split("SHA256:\n",1)[1].split("\n\n",1)[0]
         checksum=next(line.split()[0] for line in sha_section.splitlines() if len(line.split())==3 and line.split()[-1]==key)
-        download(base+"dists/bookworm/"+key,index,checksum)
-    print("Reading Debian SDK index",flush=True)
+        download(base+"dists/"+suite+"/"+key,index,checksum)
+    print("Reading "+distro+" SDK index",flush=True)
     packages={str(item["Package"]):item for item in deb822.Deb822.iter_paragraphs(io.StringIO(lzma.decompress(index.read_bytes()).decode()))}
     seeds=["libc6-dev","linux-libc-dev","libstdc++-12-dev"]
     if framework in ("ibus","both"):seeds += ["libibus-1.0-dev","libglib2.0-dev"]
@@ -103,7 +104,7 @@ def sdk(root, arch, framework, deb822, debfile):
         links=remaining
     return sysroot,selected,owners
 
-def elf_info(path, ELFFile):
+def elf_info(path, ELFFile, glibc=(2,36)):
     with path.open("rb") as file:
         elf=ELFFile(file)
         dynamic=elf.get_section_by_name(".dynamic")
@@ -115,7 +116,7 @@ def elf_info(path, ELFFile):
             for _,auxiliary in version.iter_versions():
                 for symbol in auxiliary:
                     if symbol.name.startswith("GLIBC_") and re.match(r"GLIBC_\d",symbol.name):
-                        if tuple(map(int,symbol.name[6:].split(".")))>(2,36):raise RuntimeError("Binary requires glibc newer than Debian 12: "+symbol.name)
+                        if tuple(map(int,symbol.name[6:].split(".")))>glibc:raise RuntimeError("Binary requires glibc newer than target: "+symbol.name)
         return needed,exports,elf.header.e_machine
 
 def archive_tree(root, compressed=True):
@@ -148,9 +149,11 @@ def run(args, root, publish):
     zig,deb822,debfile,ELFFile=dependencies(root)
     arch="amd64" if args.platform=="linux/amd64" else "arm64"
     machine="x86_64" if arch=="amd64" else "aarch64"
-    multiarch=machine+"-linux-gnu";rust_target=machine+"-unknown-linux-gnu";zig_target=multiarch+".2.36"
-    sysroot,packages,owners=sdk(root,arch,args.framework,deb822,debfile)
-    work=root / "target/cross-build" / arch;work.mkdir(parents=True,exist_ok=True)
+    distro=getattr(args,"distro","debian12")
+    glibc=(2,38) if distro=="deepin25" else (2,36)
+    multiarch=machine+"-linux-gnu";rust_target=machine+"-unknown-linux-gnu";zig_target=multiarch+"."+".".join(map(str,glibc))
+    sysroot,packages,owners=sdk(root,arch,args.framework,deb822,debfile,distro)
+    work=root / "target/cross-build" / distro / arch;work.mkdir(parents=True,exist_ok=True)
     linker=work / ("zig-link.cmd" if os.name=="nt" else "zig-link")
     if os.name=="nt":linker.write_text('@echo off\n"'+str(zig)+'" cc -target '+zig_target+' %*\n',encoding="utf-8")
     else:linker.write_text('#!/bin/sh\nexec "'+str(zig)+'" cc -target '+zig_target+' "$@"\n');linker.chmod(0o755)
@@ -184,12 +187,14 @@ def run(args, root, publish):
         text=(root / "wrappers/ibus-c/viet.xml.in").read_text().replace("@CMAKE_INSTALL_FULL_LIBEXECDIR@","/usr/libexec").replace("@CMAKE_INSTALL_FULL_BINDIR@","/usr/bin").replace("@PROJECT_VERSION@","0.1.0")
         destination=payload / "usr/share/ibus/component/viet.xml";destination.parent.mkdir(parents=True);destination.write_bytes(text.encode())
     if args.framework in ("fcitx5","both"):
+        gcc_runtime=next((directory / "libgcc_s.so.1" for directory in library_paths if (directory / "libgcc_s.so.1").is_file()),None)
+        if gcc_runtime is None:raise RuntimeError("SDK missing GCC unwind runtime")
         destination=payload / "usr/lib" / multiarch / "fcitx5/libviet.so";destination.parent.mkdir(parents=True)
         cpp_flags=["-std=c++17","-nostdinc++","-nostdlib++","-D_GLIBCXX_USE_CXX11_ABI=1","-shared","-fPIC","-Wl,-z,defs"]
         for directory in ["usr/include/c++/12","usr/include/"+multiarch+"/c++/12","usr/include/c++/12/backward","usr/include/Fcitx5/Core","usr/include/Fcitx5/Utils","usr/include/Fcitx5/Config"]:cpp_flags += ["-isystem",str(sysroot / directory)]
         execute([zig,"c++",*cpp_flags,*flags,root / "wrappers/fcitx5-cpp/engine.cpp","-o",destination,
             "-L",sysroot / "usr/lib/gcc" / multiarch / "12","-lviet_core","-lFcitx5Core","-lFcitx5Config","-lFcitx5Utils",
-            sysroot / "usr/lib" / multiarch / "libstdc++.so.6",sysroot / "lib" / multiarch / "libgcc_s.so.1",
+            sysroot / "usr/lib" / multiarch / "libstdc++.so.6",gcc_runtime,
             "-Wl,-rpath,$ORIGIN/../viet-ime"],root)
         for source,target in [("wrappers/fcitx5-cpp/viet.conf","usr/share/fcitx5/inputmethod/viet.conf"),("wrappers/fcitx5-cpp/viet-addon.conf","usr/share/fcitx5/addon/viet.conf")]:
             destination=payload / target;destination.parent.mkdir(parents=True,exist_ok=True);shutil.copy2(root / source,destination)
@@ -198,7 +203,7 @@ def run(args, root, publish):
     runtime=set()
     expected_machine="EM_X86_64" if arch=="amd64" else "EM_AARCH64"
     for binary in [path for path in payload.rglob("*") if path.is_file() and path.read_bytes()[:4]==b"\x7fELF"]:
-        needed,exports,elf_machine=elf_info(binary,ELFFile)
+        needed,exports,elf_machine=elf_info(binary,ELFFile,glibc)
         if elf_machine!=expected_machine:raise RuntimeError("Wrong binary architecture")
         if binary.name=="libviet_core.so" and exports!={"viet_engine_new","viet_engine_free","viet_engine_set_app_id","viet_engine_process_key","viet_engine_reset"}:raise RuntimeError("C ABI export mismatch")
         for dependency in needed:
@@ -211,13 +216,13 @@ def run(args, root, publish):
     requires += ["zenity","ibus | fcitx5" if args.framework=="both" else args.framework]
     size=(sum(path.stat().st_size for path in payload.rglob("*") if path.is_file())+1023)//1024
     control="Package: viet-ime\nVersion: 0.1.0\nArchitecture: "+arch+"\nMaintainer: Viet IME contributors <noreply@localhost>\nSection: utils\nPriority: optional\nInstalled-Size: "+str(size)+"\nDepends: "+", ".join(requires)+"\nDescription: Vietnamese input with a shared Rust core\n Precompiled IBus/Fcitx5 adapters and common settings controller.\n"
-    output=Path(tempfile.mkdtemp(prefix="release-",dir=work));package=output / ("viet-ime_0.1.0_debian12_"+arch+"_"+args.framework+".deb")
+    output=Path(tempfile.mkdtemp(prefix="release-",dir=work));package=output / ("viet-ime_0.1.0_"+distro+"_"+arch+"_"+args.framework+".deb")
     write_deb(package,control,payload)
     check=debfile.DebFile(package)
     if check.debcontrol()["Architecture"]!=arch:raise RuntimeError("DEB metadata mismatch")
     if not check.data.tgz().getmembers():raise RuntimeError("Empty package")
     check.close()
-    (output / "INSTALL.txt").write_bytes(("Viet IME - precompiled Debian 12 / "+arch+"\n\nsudo apt install ./"+package.name+"\n\nNo Rust/compiler is required on the destination machine.\nCross-compiled with Zig; ELF/ABI/dependency metadata checked. Desktop runtime test still required.\n").encode())
+    (output / "INSTALL.txt").write_bytes(("Viet IME - precompiled "+distro+" / "+arch+"\n\nsudo apt install ./"+package.name+"\n\nNo Rust/compiler is required on the destination machine.\nCross-compiled with Zig; ELF/ABI/dependency metadata checked. Desktop runtime test still required.\n").encode())
     (output / "SHA256SUMS").write_bytes((hashlib.sha256(package.read_bytes()).hexdigest()+"  "+package.name+"\n").encode())
     destination=publish(output,root,work,"viet-ime-binary-v1")
     print("Binary installer: "+str(destination / package.name))
